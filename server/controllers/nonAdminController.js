@@ -1,6 +1,6 @@
 const Employee = require("../models/employee.model");
 
-exports.clockIn = async (req, res, next) => {
+exports.clockIn = async (req, res) => {
   try {
     const { employeeId } = req.body;
     const employee = await Employee.findById(employeeId);
@@ -26,7 +26,7 @@ exports.clockIn = async (req, res, next) => {
     res.status(e.statusCode || 500).json({ message: "Clock in failed." });
   }
 };
-exports.clockOut = async (req, res, next) => {
+exports.clockOut = async (req, res) => {
   try {
     const { employeeId } = req.body;
 
@@ -52,7 +52,7 @@ exports.clockOut = async (req, res, next) => {
     res.status(error.statusCode || 500).json({ message: "Clock out failed." });
   }
 };
-exports.startBreak = async (req, res, next) => {
+exports.startBreak = async (req, res) => {
   try {
     const { employeeId } = req.body;
 
@@ -64,7 +64,7 @@ exports.startBreak = async (req, res, next) => {
     const { clockIn, clockOut, breakStart } = employee.timeAttendance.at(-1);
     const currentTime = new Date();
 
-    if (clockIn && !clockOut && clockIn < currentTime) {
+    if (clockIn && !clockOut && clockIn < currentTime && !breakStart) {
       employee.timeAttendance.at(-1).breakStart = currentTime;
       await employee.save();
       res.status(200).json({ message: "Break start successful." });
@@ -92,7 +92,7 @@ exports.endBreak = async (req, res) => {
     const breakEnd = employee.timeAttendance.at(-1)?.breakEnd;
     const currentTime = new Date();
 
-    if (clockIn && !clockOut && clockIn < currentTime && breakStart) {
+    if (clockIn && !clockOut && clockIn < currentTime && breakStart && !breakEnd) {
       employee.timeAttendance.at(-1).breakEnd= currentTime;
       await employee.save();
       res.status(200).json({ message: "Break ended successfully." });

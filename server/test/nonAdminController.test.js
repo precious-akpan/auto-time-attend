@@ -7,6 +7,81 @@ const {
   endBreak,
 } = require("../controllers/nonAdminController");
 const { describe } = require("@jest/globals");
+afterEach(() => {
+  jest.resetAllMocks()
+  Employee.mockReset()
+});
+
+describe("startBreak", () => {
+  let req, res, next;
+
+  beforeEach(() => {
+    req = { body: { employeeId: "<employee_id>" } };
+    res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    next = jest.fn();
+  });
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+  it("should start break if employee is found and clocked in", async () => {
+    const employee = {
+      timeAttendance: [{ clockIn: new Date() }],
+      save: jest.fn().mockReturnThis(),
+    };
+    Employee.findById = jest.fn().mockResolvedValue(employee);
+
+    await startBreak(req, res, next);
+    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
+    expect(employee.timeAttendance.at(-1).breakStart).toBeDefined();
+    expect(employee.save).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Break start successful.",
+    });
+  });
+
+  it("should return error message if employee is not found", async () => {
+    Employee.findById = jest.fn().mockResolvedValue(null);
+
+    await startBreak(req, res, next);
+
+    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ message: "Break start failed." });
+  });
+
+  it("should return already started message if break is already started", async () => {
+    expect.assertions(3);
+    const employee = {
+      timeAttendance: [{ clockIn: new Date(), breakStart: new Date() }],
+      save: jest.fn().mockReturnThis(),
+    };
+    Employee.findById = jest.fn().mockResolvedValue(employee);
+
+    await startBreak(req, res, next);
+
+    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Break already started.",
+    });
+  });
+
+  it("should return error message if break is started after clock-out", async () => {
+    const employee = {
+      timeAttendance: [{ clockIn: new Date(), clockOut: new Date() }],
+    };
+    Employee.findById = jest.fn().mockResolvedValue(employee);
+
+    await startBreak(req, res, next);
+
+    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Cannot start break after clock-out.",
+    });
+  });
+});
 
 describe("clockIn function", () => {
   it("should throw an error if employee is not found", async () => {
@@ -89,7 +164,6 @@ describe("clockOut", () => {
     req = { body: { employeeId: "123" } };
     res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     next = jest.fn();
-    const employee = { timeAttendance: [], save: jest.fn().mockReturnThis() };
   });
 
   afterEach(() => {
@@ -120,9 +194,11 @@ describe("clockOut", () => {
   });
 
   test("should update clock out time if clock in time exists and clock out time does not exist", async () => {
-    const employee = { timeAttendance: [{ clockIn: "2022-01-01T09:00:00Z" }] };
+    const employee = {
+      save: jest.fn(),
+      timeAttendance: [{ clockIn: "2022-01-01T09:00:00Z" }],
+    };
     Employee.findById.mockResolvedValueOnce(employee);
-    employee.save = jest.fn().mockResolvedValueOnce();
 
     await clockOut(req, res, next);
 
@@ -156,88 +232,27 @@ describe("clockOut", () => {
   });
 });
 
-describe("startBreak", () => {
+describe("endBreak()", () => {
   let req, res, next;
-
   beforeEach(() => {
     req = { body: { employeeId: "<employee_id>" } };
     res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     next = jest.fn();
   });
+  afterEach(() => {
+    jest.resetAllMocks();
+    Employee.mockClear();
+  });
 
-  it("should start break if employee is found and clocked in", async () => {
+  it("Should end break when employee clocks out and break is ongoing", async () => {
     const employee = {
-      timeAttendance: [{ clockIn: new Date() }],
+      timeAttendance: [{ clockIn: new Date(), breakStart: new Date() }],
       save: jest.fn().mockReturnThis(),
     };
-    Employee.findById = jest.fn().mockResolvedValue(employee);
-
-    await startBreak(req, res, next);
-
-    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
-    expect(employee.timeAttendance.at(-1).breakStart).toBeDefined();
-    expect(employee.save).toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      message: "Break start successful.",
-    });
-  });
-
-  it("should return error message if employee is not found", async () => {
-    Employee.findById = jest.fn().mockResolvedValue(null);
-    const error = new Error("Employee not found");
-
-    await startBreak(req, res, next);
-
-    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith({ message: "Break start failed." });
-  });
-
-  it("should return error message if break is already started", async () => {
-    const employee = {
-      timeAttendance: [{ clockIn: new Date(), breakStart: new Date() }],
-    };
-    Employee.findById = jest.fn().mockResolvedValue(employee);
-
-    await startBreak(req, res, next);
-
-    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      message: "Break already started.",
-    });
-  });
-
-  it("should return error message if break is started after clock-out", async () => {
-    const employee = {
-      timeAttendance: [{ clockIn: new Date(), clockOut: new Date() }],
-    };
-    Employee.findById = jest.fn().mockResolvedValue(employee);
-
-    await startBreak(req, res, next);
-
-    expect(Employee.findById).toHaveBeenCalledWith("<employee_id>");
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      message: "Cannot start break after clock-out.",
-    });
-  });
-});
-
-describe("endBreak()", () => {
-  it("should end break when employee exists and break is ongoing", async () => {
-    const employee = {
-      timeAttendance: [{ clockIn: new Date(), breakStart: new Date() }],
-    };
-
-    const req = { body: { employeeId: "123" } };
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
     Employee.findById = jest.fn().mockResolvedValue(employee);
-    employee.save = jest.fn().mockResolvedValue(employee);
 
-    await endBreak(req, res);
+    await endBreak(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
@@ -247,13 +262,12 @@ describe("endBreak()", () => {
 
   it("Cannot end break after clock-out", async () => {
     const employee = {
-      timeAttendance: [],
+      save: jest.fn(),
+      timeAttendance: [{ clockIn: new Date(), clockOut: new Date() }],
     };
 
     const req = { body: { employeeId: "123" } };
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
-    employee.timeAttendance.push({ clockIn: new Date(), clockOut: new Date() });
 
     Employee.findById = jest.fn().mockResolvedValue(employee);
 
@@ -267,17 +281,15 @@ describe("endBreak()", () => {
 
   it("Cannot end break if break is already ended", async () => {
     const employee = {
-      timeAttendance: [],
+      save: jest.fn(),
+      timeAttendance: [
+        {
+          clockIn: new Date(),
+          breakStart: new Date(),
+          breakEnd: new Date(),
+        },
+      ],
     };
-
-    const req = { body: { employeeId: "123" } };
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
-    employee.timeAttendance.push({
-      clockIn: new Date(),
-      breakStart: new Date(),
-      breakEnd: new Date(),
-    });
 
     Employee.findById = jest.fn().mockResolvedValue(employee);
 
@@ -287,34 +299,7 @@ describe("endBreak()", () => {
     expect(res.json).toHaveBeenCalledWith({ message: "Break already ended." });
   });
 
-  it("End break when employee exists and break is ongoing", async () => {
-    const employee = {
-      timeAttendance: [],
-      save: jest.fn().mockReturnThis()
-    };
-
-    const req = { body: { employeeId: "123" } };
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
-    employee.timeAttendance.push({
-      clockIn: new Date(),
-      breakStart: new Date(),
-    });
-
-    Employee.findById = jest.fn().mockResolvedValue(employee);
-
-    await endBreak(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      message: "Break ended successfully.",
-    });
-  });
-
-  it("Return error message when employee is not found", async () => {
-    const req = { body: { employeeId: "123" } };
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
+  it("Should return error message when employee is not found", async () => {
     Employee.findById = jest.fn().mockResolvedValue(null);
 
     await endBreak(req, res);
@@ -323,10 +308,7 @@ describe("endBreak()", () => {
     expect(res.json).toHaveBeenCalledWith({ message: "Break end failed." });
   });
 
-  it("Return error message when an error occurs", async () => {
-    const req = { body: { employeeId: "123" } };
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
+  it("Should return error message when an error occurs", async () => {
     const error = new Error("Test error");
     error.statusCode = 400;
 
